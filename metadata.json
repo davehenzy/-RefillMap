@@ -1,0 +1,7 @@
+{
+  "name": "RefillMap",
+  "description": "Find free drinking water spots nearby, filter by amenities, and contribute new refill stations.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

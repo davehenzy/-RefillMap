@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>RefillMap</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#2b8cee",
+              "primary-dark": "#1a6bbd",
+              "background-light": "#f6f7f8",
+              "background-dark": "#101922",
+              surface: "#ffffff",
+              "surface-dark": "#1c2630",
+              success: "#10b981",
+            },
+            fontFamily: {
+              display: ["Public Sans", "sans-serif"],
+              sans: ["Public Sans", "sans-serif"],
+            },
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              "2xl": "1rem",
+              full: "9999px",
+            },
+            animation: {
+              "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+            }
+          },
+        },
+      };
+    </script>
+    <style>
+      /* Custom scrollbar */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      
+      body {
+        overscroll-behavior-y: none;
+      }
+
+      /* Map Background Pattern */
+      .map-pattern {
+        background-color: #e5e7eb;
+        background-image: 
+            linear-gradient(to right, rgba(255,255,255,0.4) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255,255,255,0.4) 1px, transparent 1px);
+        background-size: 50px 50px;
+      }
+      .dark .map-pattern {
+        background-color: #1f2937;
+        background-image: 
+            linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+      }
+      
+      /* Pulse Animations */
+      @keyframes pulse-ring {
+        0% { transform: scale(0.33); opacity: 0.8; }
+        80%, 100% { opacity: 0; }
+      }
+      @keyframes pulse-dot {
+        0% { transform: scale(0.8); }
+        50% { transform: scale(1); }
+        100% { transform: scale(0.8); }
+      }
+      .user-location-ring {
+        animation: pulse-ring 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      }
+      .user-location-dot {
+        animation: pulse-dot 2.5s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+</head>
+  <body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display h-[100dvh] w-screen overflow-hidden selection:bg-primary/30">
+    <div id="root" class="h-full w-full"></div>
+  </body>
+</html>
