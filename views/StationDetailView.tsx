@@ -12,6 +12,7 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({ station, o
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [newRating, setNewRating] = useState(0);
   const [newReviewText, setNewReviewText] = useState("");
+  const [showToast, setShowToast] = useState(false);
 
   const handleSubmitReview = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +30,12 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({ station, o
     setShowReviewForm(false);
     setNewRating(0);
     setNewReviewText("");
+  };
+
+  const handleStatusReport = (status: string) => {
+    // In a real app, this would send data to backend
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   const renderStars = (rating: number, interactive: boolean = false, size: number = 20) => {
@@ -94,13 +101,17 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({ station, o
                     <Icon name="close" className="absolute top-4 right-4 text-xl" /> 
                 </button>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">{station.address}</p>
+            <div className="flex items-center text-slate-500 dark:text-slate-400 text-sm mb-4 gap-2">
+                <span>{station.distance || 'Nearby'}</span>
+                <span>•</span>
+                <span>{station.address}</span>
+            </div>
             
             <div className="flex items-center justify-between">
                 <div className="flex gap-2">
                     <div className="px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-xs font-semibold flex items-center gap-1">
                         <Icon name="water_drop" size={16} filled />
-                        Outdoor Tap
+                        {station.type === 'fountain' ? 'Fountain' : station.type === 'bottle_filler' ? 'Bottle Filler' : 'Tap'}
                     </div>
                     <div className="px-2.5 py-1 rounded-md bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 text-xs font-semibold flex items-center gap-1">
                         <Icon name="verified" size={16} filled />
@@ -143,18 +154,35 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({ station, o
          <div className="bg-white dark:bg-surface-dark rounded-xl border border-slate-100 dark:border-slate-800 p-5 mb-6">
             <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold text-slate-900 dark:text-white">Is it working?</h3>
-                <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">Last checked: 2h ago</span>
+                <span className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">
+                    Last confirmed: {station.lastConfirmed || 'Unknown'}
+                </span>
             </div>
             
             <div className="flex flex-col gap-3">
-                <button className="w-full p-3 rounded-lg border border-green-200 bg-green-50 dark:bg-green-900/10 dark:border-green-800 text-green-700 dark:text-green-400 flex items-center justify-center gap-2 hover:bg-green-100 dark:hover:bg-green-900/20 transition-colors">
+                <button 
+                    onClick={() => handleStatusReport('working')}
+                    className="w-full p-4 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/20 active:scale-[0.98] transition-all"
+                >
                     <Icon name="check_circle" filled />
-                    Yes, working
+                    Still working
                 </button>
-                 <button className="w-full p-3 rounded-lg border border-slate-200 bg-white dark:bg-slate-800 dark:border-slate-700 text-slate-600 dark:text-slate-400 flex items-center justify-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-                    <Icon name="help" />
-                    Not working
-                </button>
+                <div className="grid grid-cols-2 gap-3">
+                    <button 
+                        onClick={() => handleStatusReport('unavailable')}
+                        className="w-full p-3 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 font-semibold flex items-center justify-center gap-2 hover:bg-orange-200 dark:hover:bg-orange-900/50 active:scale-[0.98] transition-all"
+                    >
+                        <Icon name="block" />
+                        Not available
+                    </button>
+                    <button 
+                        onClick={() => handleStatusReport('broken')}
+                        className="w-full p-3 rounded-xl bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 font-semibold flex items-center justify-center gap-2 hover:bg-red-200 dark:hover:bg-red-900/50 active:scale-[0.98] transition-all"
+                    >
+                        <Icon name="build" />
+                        Out of order
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -238,6 +266,16 @@ export const StationDetailView: React.FC<StationDetailViewProps> = ({ station, o
                         Post Review
                     </button>
                 </form>
+            </div>
+        </div>
+      )}
+
+      {/* Success Toast */}
+      {showToast && (
+        <div className="absolute top-6 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-top-4 fade-in duration-300">
+            <div className="bg-slate-900/90 dark:bg-white/90 backdrop-blur text-white dark:text-slate-900 px-6 py-3 rounded-full shadow-xl flex items-center gap-3">
+                <Icon name="favorite" className="text-red-500" filled />
+                <span className="font-medium">Thanks for helping 💙</span>
             </div>
         </div>
       )}

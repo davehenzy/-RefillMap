@@ -1,230 +1,232 @@
-import React, { useRef, useState, useEffect } from 'react';
-import { Station, MapViewport } from '../types';
-import { Icon } from './Icon';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
+import L from 'leaflet';
+import { Station, Coordinates } from '../types';
+import { LONDON_CENTER } from '../constants';
+import { createStationIcon, createClusterIcon, calculateOffsetCenter } from '../utils/map';
 
 interface MapProps {
-  stations: Station[];
-  selectedStationId: string | null;
-  onStationSelect: (station: Station) => void;
-  onMapClick: () => void;
-  viewport: MapViewport;
-  onViewportChange: (viewport: MapViewport) => void;
+  stations?: Station[];
+  selectedStationId?: string | null;
+  onStationSelect?: (station: Station) => void;
+  onMapClick?: () => void;
+  interactive?: boolean;
+  center?: Coordinates;
+  onLocationSelect?: (coords: Coordinates) => void;
 }
 
+// --- Sub-components for Separation of Concerns ---
+
+// 1. User Location Logic
+const UserLocationMarker = () => {
+  const [position, setPosition] = useState<L.LatLng | null>(null);
+  const map = useMap();
+
+  useEffect(() => {
+    // Only locate once on mount to avoid battery drain / constant re-centering
+    map.locate().on("locationfound", function (e) {
+      setPosition(e.latlng);
+      // Optional: Fly to user only if no station is selected initially
+      // map.flyTo(e.latlng, 15); 
+    });
+  }, [map]);
+
+  if (position === null) return null;
+
+  const userIcon = L.divIcon({
+    className: 'custom-user-location',
+    html: `
+      <div class="relative w-4 h-4">
+        <div class="absolute w-full h-full bg-primary border-2 border-white dark:border-slate-900 rounded-full shadow-sm z-10"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-primary/20 rounded-full animate-pulse z-0"></div>
+      </div>
+    `,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8],
+  });
+
+  return <Marker position={position} icon={userIcon} interactive={false} />;
+};
+
+// 2. Map Event Handler & Bounds Manager
+// This component manages the "view" of the map and reports back bounds for optimization
+interface MapEventsProps {
+  onBoundsChange: (bounds: L.LatLngBounds) => void;
+  onMapClick?: () => void;
+}
+
+const MapEvents: React.FC<MapEventsProps> = ({ onBoundsChange, onMapClick }) => {
+  const map = useMapEvents({
+    moveend: () => {
+      onBoundsChange(map.getBounds());
+    },
+    click: () => {
+      if (onMapClick) onMapClick();
+    },
+    load: () => {
+        onBoundsChange(map.getBounds());
+    }
+  });
+
+  // Trigger initial bounds
+  useEffect(() => {
+    onBoundsChange(map.getBounds());
+  }, [map, onBoundsChange]);
+
+  return null;
+};
+
+// 3. Map Controller
+// Handles imperative commands (flyTo, fitBounds) based on prop changes
+interface MapControllerProps {
+  selectedStation: Station | null;
+}
+
+const MapController: React.FC<MapControllerProps> = ({ selectedStation }) => {
+    const map = useMap();
+    const previousStationId = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (selectedStation && selectedStation.id !== previousStationId.current) {
+            // "Slightly pan map upward" logic
+            const latLng = new L.LatLng(selectedStation.coordinates.lat, selectedStation.coordinates.lng);
+            const targetCenter = calculateOffsetCenter(map, latLng, 150); // 150px offset for bottom sheet
+
+            map.flyTo(targetCenter, 16, {
+                animate: true,
+                duration: 0.8,
+                easeLinearity: 0.25
+            });
+            previousStationId.current = selectedStation.id;
+        } else if (!selectedStation) {
+            previousStationId.current = null;
+        }
+    }, [selectedStation, map]);
+
+    return null;
+};
+
+// --- Main Component ---
+
 export const Map: React.FC<MapProps> = ({ 
-  stations, 
+  stations = [], 
   selectedStationId, 
   onStationSelect, 
   onMapClick,
-  viewport,
-  onViewportChange
+  interactive = true,
+  center = LONDON_CENTER,
+  onLocationSelect
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const lastPosition = useRef({ x: 0, y: 0 });
+  
+  // State for performance optimization
+  // We only render markers that are roughly within view to keep the DOM light
+  const [visibleBounds, setVisibleBounds] = useState<L.LatLngBounds | null>(null);
+  
+  // Debounce the bounds update to prevent excessive filtering during panning
+  const handleBoundsChange = useCallback((bounds: L.LatLngBounds) => {
+    // Simple debounce could be added here if needed, but React's batching helps
+    // For now, we update immediately on moveend (which is already "debounced" by leaflet)
+    setVisibleBounds(bounds);
+  }, []);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  // Filter stations based on visibility
+  // If stations array is massive (>1000), this is crucial. 
+  // For small civic apps, it helps with mobile battery life.
+  const visibleStations = useMemo(() => {
+    if (!visibleBounds) return stations;
+    // Add a buffer to the bounds so markers don't "pop" in at the edges
+    const paddedBounds = visibleBounds.pad(0.5); 
+    return stations.filter(s => 
+      paddedBounds.contains({ lat: s.coordinates.lat, lng: s.coordinates.lng })
+    );
+  }, [stations, visibleBounds]);
 
-    if (!containerRef.current) return;
-
-    const scaleSensitivity = 0.001;
-    const delta = -e.deltaY * scaleSensitivity;
-    const newScale = Math.min(Math.max(viewport.scale * Math.exp(delta), 0.5), 8);
-
-    const rect = containerRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Calculate new position to zoom towards mouse
-    const scaleChange = newScale / viewport.scale;
-    const newX = mouseX - (mouseX - viewport.x) * scaleChange;
-    const newY = mouseY - (mouseY - viewport.y) * scaleChange;
-
-    onViewportChange({
-      scale: newScale,
-      x: newX,
-      y: newY
-    });
-  };
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return; // Only left click
-    setIsDragging(true);
-    lastPosition.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    
-    const deltaX = e.clientX - lastPosition.current.x;
-    const deltaY = e.clientY - lastPosition.current.y;
-    
-    lastPosition.current = { x: e.clientX, y: e.clientY };
-    
-    onViewportChange({
-      ...viewport,
-      x: viewport.x + deltaX,
-      y: viewport.y + deltaY
-    });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-  };
-
-  // Touch support for panning
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      setIsDragging(true);
-      lastPosition.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || e.touches.length !== 1) return;
-    
-    // Prevent scrolling
-    // e.preventDefault(); // Note: might need passive: false listener for full prevention
-
-    const deltaX = e.touches[0].clientX - lastPosition.current.x;
-    const deltaY = e.touches[0].clientY - lastPosition.current.y;
-    
-    lastPosition.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    
-    onViewportChange({
-      ...viewport,
-      x: viewport.x + deltaX,
-      y: viewport.y + deltaY
-    });
-  };
-
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-  };
-
-  // Attach non-passive wheel listener to prevent browser zoom logic if needed
-  // React's onWheel is passive by default in some browsers, but usually fine for this.
-  // We'll rely on React event system for now.
+  const selectedStation = useMemo(() => 
+    stations.find(s => s.id === selectedStationId) || null, 
+  [stations, selectedStationId]);
 
   return (
-    <div 
-      ref={containerRef}
-      className={`absolute inset-0 z-0 bg-slate-200 dark:bg-slate-800 overflow-hidden ${isDragging ? 'cursor-grabbing' : 'cursor-grab'} touch-none`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      aria-label="Interactive map"
-    >
-      {/* Movable Map Layer */}
-      <div 
-        className="map-pattern w-full h-full origin-top-left will-change-transform"
-        style={{
-          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
-        }}
-        onClick={onMapClick}
+    <div className="w-full h-full relative z-0 bg-background-light dark:bg-background-dark">
+      <MapContainer 
+        center={[center.lat, center.lng]} 
+        zoom={14} 
+        minZoom={5}
+        maxZoom={18}
+        scrollWheelZoom={interactive}
+        zoomControl={false}
+        dragging={interactive}
+        doubleClickZoom={interactive}
+        className="w-full h-full outline-none"
+        // Ensure map instance is preserved
+        placeholder={<div className="w-full h-full bg-slate-100 dark:bg-slate-900 animate-pulse" />}
       >
-        {/* Simulated Map Elements */}
-        <svg className="w-full h-full absolute inset-0 text-white dark:text-slate-700 opacity-60 pointer-events-none" xmlns="http://www.w3.org/2000/svg">
-          {/* River */}
-          <path className="dark:stroke-slate-600" d="M-100,300 C100,280 300,350 500,320 S800,200 1200,250" fill="none" stroke="#a5b4fc" strokeWidth="40"></path>
-          {/* Park */}
-          <path className="dark:fill-slate-700/50" d="M600,100 L800,100 L850,250 L650,300 Z" fill="#dcfce7"></path>
-          {/* Major Roads */}
-          <line stroke="currentColor" strokeWidth="12" x1="0" x2="1000" y1="150" y2="150"></line>
-          <line stroke="currentColor" strokeWidth="12" x1="200" x2="200" y1="0" y2="1000"></line>
-          <line stroke="currentColor" strokeWidth="8" x1="0" x2="1000" y1="550" y2="550"></line>
-          <line stroke="currentColor" strokeWidth="8" x1="600" x2="600" y1="0" y2="1000"></line>
-        </svg>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+        />
+        
+        {interactive && <UserLocationMarker />}
+        {interactive && <MapController selectedStation={selectedStation} />}
+        
+        <MapEvents 
+            onBoundsChange={handleBoundsChange} 
+            onMapClick={onMapClick} 
+        />
 
-        {/* User Location */}
-        <div className="absolute top-[55%] left-[45%] transform -translate-x-1/2 -translate-y-1/2 z-0 pointer-events-none">
-          <div className="relative w-16 h-16 flex items-center justify-center">
-            <div className="absolute w-full h-full bg-primary/30 rounded-full user-location-ring"></div>
-            <div 
-                className="w-4 h-4 bg-primary border-2 border-white dark:border-background-dark rounded-full shadow-sm user-location-dot z-10"
-                style={{ transform: `scale(${1 / Math.sqrt(viewport.scale)})` }} // Keep relatively constant size
-            ></div>
-            {/* View cone */}
-            <div className="absolute w-24 h-24 bg-gradient-to-t from-primary/20 to-transparent rounded-full transform rotate-45 -top-8 opacity-0"></div>
-          </div>
-        </div>
-
-        {/* Pins */}
-        {stations.map((station) => {
-          const isSelected = selectedStationId === station.id;
-          return (
-            <div
-                key={station.id}
-                className="absolute z-10 flex flex-col items-center justify-end group focus:outline-none"
-                style={{ 
-                    top: `${station.coordinates.y}%`, 
-                    left: `${station.coordinates.x}%`,
-                    // Counter-scale the marker container so it stays the same visual size
-                    transform: `translate(-50%, -100%) scale(${1 / viewport.scale})`,
-                    transformOrigin: 'bottom center',
-                    zIndex: isSelected ? 50 : 10
+        {/* 
+          Location Picker Mode 
+          (If onLocationSelect is present, we don't render normal markers) 
+        */}
+        {onLocationSelect ? (
+            <LocationPickerOverlay onSelect={onLocationSelect} />
+        ) : (
+            /* Marker Clustering Configuration */
+            <MarkerClusterGroup
+                chunkedLoading
+                iconCreateFunction={createClusterIcon}
+                maxClusterRadius={60} // Tighter clusters
+                spiderfyOnMaxZoom={true}
+                showCoverageOnHover={false}
+                disableClusteringAtZoom={15} // "Disable clustering when zoom >= 15"
+                polygonOptions={{
+                    fillColor: 'transparent',
+                    color: 'transparent',
+                    opacity: 0,
+                    fillOpacity: 0
                 }}
             >
-                <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onStationSelect(station);
-                    }}
-                    className={`
-                        relative flex flex-col items-center transition-transform duration-200
-                        ${isSelected ? 'scale-110' : 'hover:scale-110'}
-                    `}
-                >
-                    {isSelected && (
-                        <div className="bg-white dark:bg-background-dark text-slate-800 dark:text-white px-3 py-1.5 rounded-lg shadow-md mb-2 text-xs font-semibold whitespace-nowrap opacity-100 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                        {station.name}
-                        </div>
-                    )}
-                    
-                    <div 
-                        className={`
-                        ${isSelected ? 'w-12 h-12 border-[3px]' : 'w-10 h-10 border-2'}
-                        bg-primary text-white rounded-full rounded-bl-none transform rotate-[-45deg] 
-                        flex items-center justify-center shadow-lg border-white dark:border-background-dark
-                        transition-all duration-300
-                        `}
-                    >
-                        <Icon 
-                        name="water_drop" 
-                        className={`transform rotate-[45deg] ${isSelected ? 'text-2xl' : 'text-xl'}`} 
-                        />
-                    </div>
-                    <div className={`absolute -bottom-1 ${isSelected ? 'w-3 h-1.5' : 'w-2 h-1'} bg-black/20 rounded-full blur-[2px]`}></div>
-                </button>
-            </div>
-          );
-        })}
-
-        {/* Cluster Simulation */}
-        <div 
-            className="absolute top-[35%] left-[75%] z-10"
-            style={{
-                transform: `translate(-50%, -100%) scale(${1 / viewport.scale})`,
-                transformOrigin: 'bottom center'
-            }}
-        >
-            <button className="group transform hover:scale-110 transition-transform duration-200 focus:outline-none">
-                <div className="relative flex flex-col items-center">
-                <div className="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center shadow-lg border-2 border-white dark:border-background-dark font-bold text-sm">
-                    3
-                </div>
-                </div>
-            </button>
-        </div>
-
-      </div>
+                {visibleStations.map(station => (
+                    <Marker
+                        key={station.id}
+                        position={[station.coordinates.lat, station.coordinates.lng]}
+                        icon={createStationIcon(
+                            station.type, 
+                            selectedStationId === station.id, 
+                            station.status
+                        )}
+                        zIndexOffset={selectedStationId === station.id ? 1000 : 0}
+                        eventHandlers={{
+                            click: (e) => {
+                                L.DomEvent.stopPropagation(e);
+                                onStationSelect?.(station);
+                            },
+                        }}
+                    />
+                ))}
+            </MarkerClusterGroup>
+        )}
+      </MapContainer>
     </div>
   );
+};
+
+// Helper for the location picker mode
+const LocationPickerOverlay = ({ onSelect }: { onSelect: (coords: Coordinates) => void }) => {
+    useMapEvents({
+        click(e) {
+            onSelect({ lat: e.latlng.lat, lng: e.latlng.lng });
+        },
+    });
+    return null;
 };

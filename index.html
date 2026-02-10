@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
     <script>
       tailwind.config = {
         darkMode: "class",
@@ -52,22 +53,45 @@
       body {
         overscroll-behavior-y: none;
       }
-
-      /* Map Background Pattern */
-      .map-pattern {
-        background-color: #e5e7eb;
-        background-image: 
-            linear-gradient(to right, rgba(255,255,255,0.4) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(255,255,255,0.4) 1px, transparent 1px);
-        background-size: 50px 50px;
+      
+      /* Leaflet Overrides */
+      .leaflet-container {
+        width: 100%;
+        height: 100%;
+        background-color: #f6f7f8;
+        font-family: 'Public Sans', sans-serif;
       }
-      .dark .map-pattern {
-        background-color: #1f2937;
-        background-image: 
-            linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
-            linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+      .dark .leaflet-container {
+        background-color: #101922;
+      }
+      .leaflet-control-attribution {
+        opacity: 0.5;
+        font-size: 10px;
       }
       
+      /* Custom Marker Cluster Styles */
+      .custom-cluster-icon {
+        background: rgba(43, 140, 238, 0.9);
+        color: white;
+        border: 2px solid white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 14px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        transition: all 0.2s ease;
+      }
+      .dark .custom-cluster-icon {
+        background: rgba(43, 140, 238, 0.8);
+        border-color: #1c2630;
+      }
+      .custom-cluster-icon:hover {
+        transform: scale(1.1);
+        background: #1a6bbd;
+      }
+
       /* Pulse Animations */
       @keyframes pulse-ring {
         0% { transform: scale(0.33); opacity: 0.8; }
@@ -88,11 +112,14 @@
   <script type="importmap">
 {
   "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
     "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
+    "vite": "https://esm.sh/vite@^7.3.1",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4",
-    "vite": "https://esm.sh/vite@^7.3.1"
+    "leaflet": "https://esm.sh/leaflet@^1.9.4",
+    "react-leaflet": "https://esm.sh/react-leaflet@^5.0.0",
+    "react-leaflet-cluster": "https://esm.sh/react-leaflet-cluster@^2.1.0"
   }
 }
 </script>

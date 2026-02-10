@@ -1,14 +1,13 @@
-export type ViewState = 'map' | 'add_station' | 'station_details' | 'filters';
+export type ViewState = 'landing' | 'map' | 'add_station' | 'filters';
 
 export interface Coordinates {
-  x: number;
-  y: number;
+  lat: number;
+  lng: number;
 }
 
 export interface MapViewport {
-  x: number;
-  y: number;
-  scale: number;
+  center: Coordinates;
+  zoom: number;
 }
 
 export interface Review {
@@ -32,11 +31,12 @@ export interface Station {
     cold: boolean;
     accessible: boolean;
   };
-  rating: number;
-  reviews: Review[];
+  rating?: number; // Optional, kept for simple star display if needed
   accessNotes?: string;
   image?: string;
   distance?: string;
+  lastConfirmed?: string;
+  reviews?: Review[];
 }
 
 export interface FilterState {

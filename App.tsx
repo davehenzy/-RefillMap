@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MapView } from './views/MapView';
 import { AddStationView } from './views/AddStationView';
-import { StationDetailView } from './views/StationDetailView';
 import { FilterView } from './views/FilterView';
-import { Station, ViewState } from './types';
+import { LandingView } from './views/LandingView';
+import { Station, ViewState, FilterState } from './types';
 import { MOCK_STATIONS } from './constants';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<ViewState>('map');
+  const [view, setView] = useState<ViewState>('landing');
   const [selectedStation, setSelectedStation] = useState<Station | null>(null);
   const [stations] = useState<Station[]>(MOCK_STATIONS);
+  
+  const [filters, setFilters] = useState<FilterState>({
+    freeOnly: true,
+    publicAccess: false,
+    indoor: false,
+    outdoor: false,
+  });
 
   const handleStationSelect = (station: Station | null) => {
     setSelectedStation(station);
@@ -19,44 +26,53 @@ const App: React.FC = () => {
     setView('map');
   };
 
+  // Filter stations logic
+  const filteredStations = useMemo(() => {
+    return stations.filter(station => {
+      // Free filter
+      if (filters.freeOnly && !station.isFree) return false;
+      return true;
+    });
+  }, [stations, filters]);
+
   return (
     <div className="h-full w-full relative overflow-hidden">
-      {/* 
-        We use conditional rendering for the main views but keep MapView mounted 
-        behind modals if needed, or simple switching. 
-        For a complex map app, you often keep the map mounted. 
-      */}
       
-      {/* Map View acts as the "home" and is always somewhat present in state */}
-      <div className={`absolute inset-0 transition-opacity duration-300 ${view === 'station_details' || view === 'add_station' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+      {/* Landing View */}
+      {view === 'landing' && (
+        <div className="absolute inset-0 z-50">
+            <LandingView 
+                onFindWater={() => setView('map')} 
+                onAddPoint={() => setView('add_station')} 
+            />
+        </div>
+      )}
+      
+      {/* Map View - Always mounted to preserve map state */}
+      <div className={`absolute inset-0 transition-opacity duration-300 ${view === 'add_station' || view === 'landing' ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
          <MapView 
-            stations={stations}
+            stations={filteredStations}
             selectedStation={selectedStation}
             onSelectStation={handleStationSelect}
             onChangeView={setView}
          />
       </div>
 
-      {/* Overlays / Modals */}
+      {/* Overlays */}
       
       {view === 'filters' && (
-        <FilterView onClose={() => setView('map')} />
+        <FilterView 
+            currentFilters={filters}
+            onApply={setFilters}
+            onClose={() => setView('map')} 
+        />
       )}
 
-      {/* Full Screen Views */}
+      {/* Full Screen Modals */}
       
       {view === 'add_station' && (
         <div className="absolute inset-0 z-50 animate-in slide-in-from-bottom duration-300">
             <AddStationView onClose={handleBackToMap} />
-        </div>
-      )}
-
-      {view === 'station_details' && selectedStation && (
-        <div className="absolute inset-0 z-50 animate-in slide-in-from-right duration-300">
-            <StationDetailView 
-                station={selectedStation} 
-                onBack={handleBackToMap} 
-            />
         </div>
       )}
     </div>
